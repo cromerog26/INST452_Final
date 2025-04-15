@@ -10,27 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Data Preprocessing
+The dataset has no missing values. The dataset was preprocessed; *bucketing of age*.
 
 ```{r}
-# Import libraries
-packages <- c("tidyverse", "caret", "corrplot", "pROC")
-
-new_packages <- packages[!packages %in% installed.packages()]
-if (length(new_packages) > 0) {
-  install.packages(new_packages)
-}
-
-library(tidyverse)
-library(caret)
-library(corrplot)
-library(pROC)
-
-# Load Data
-df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
+# Import Data
+df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv", )
 
 # Examine the dataset
 summary(df)
-
+str(df)
 ```
 
 # Data Visualization
