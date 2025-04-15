@@ -1,0 +1,46 @@
+---
+title: "INST452 Final Project"
+authors: "Cesar Romero-Gonzalez, Micah Seghetti, Minsung Kim, Neha Mathur, Zulykath Lucero"
+date: "2025-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Preprocessing
+
+```{r}
+
+```
+
+# Data Visualization
+
+```{r}
+
+```
+
+# Model Building
+
+```{r}
+
+```
+
+# Cross-Validation Model Evaluation
+
+```{r}
+
+```
+
+# Fairness and Bias Evaluation
+
+```{r}
+
+```
+
+# Test Set Model Evaluation
+
+```{r}
+
+```
