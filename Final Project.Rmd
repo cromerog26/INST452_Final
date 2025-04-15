@@ -12,6 +12,24 @@ knitr::opts_chunk$set(echo = TRUE)
 # Data Preprocessing
 
 ```{r}
+# Import libraries
+packages <- c("tidyverse", "caret", "corrplot", "pROC")
+
+new_packages <- packages[!packages %in% installed.packages()]
+if (length(new_packages) > 0) {
+  install.packages(new_packages)
+}
+
+library(tidyverse)
+library(caret)
+library(corrplot)
+library(pROC)
+
+# Load Data
+df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
+
+# Examine the dataset
+summary(df)
 
 ```
 
