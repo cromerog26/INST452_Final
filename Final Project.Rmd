@@ -19,6 +19,9 @@ df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv", )
 # Examine the dataset
 summary(df)
 str(df)
+
+# Handle Missing Values
+drop_na(df) # There are no missing values in the data
 ```
 
 # Data Visualization
