@@ -1,6 +1,6 @@
 ---
 title: "INST452 Final Project"
-authors: "Cesar Romero-Gonzalez, Micah Seghetti, Minsung Kim, Neha Mathur, Zulykath Lucero"
+author: "Cesar Romero-Gonzalez, Micah Seghetti, Minsung Kim, Neha Mathur, Zulykath Lucero"
 date: "2025-05-11"
 output: html_document
 ---
