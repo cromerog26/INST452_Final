@@ -14,14 +14,17 @@ The dataset has no missing values. The dataset was preprocessed; *bucketing of a
 
 ```{r}
 # Import Data
-df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv", )
+df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
 
 # Examine the dataset
 summary(df)
 str(df)
 
 # Handle Missing Values
-drop_na(df) # There are no missing values in the data
+df <- drop_na(df) # There are no missing values in the data
+
+names(df)
+
 ```
 
 # Data Visualization
@@ -33,11 +36,12 @@ library(corrplot)
 library(caret)
 
 # (adjust your path as needed to your local path)
-data <- read.csv("diabetes_binary_health_indicators_BRFSS2015.csv")
+data <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
 
 head(data)
 
-data$Diabetes_binary <- factor(data$Diabetes_binary, levels = c(0,1), labels = c("No", "Yes"))
+data$Diabetes_012 <- factor(data$Diabetes_012, levels = c(0,1), labels = c("No", "Yes"))
+
 
 # 1. Histogram of BMI
 ggplot(data, aes(x = BMI)) +
@@ -46,7 +50,7 @@ ggplot(data, aes(x = BMI)) +
   theme_minimal()
 
 # 2. Box Plot: Age Category by Diabetes Status
-ggplot(data, aes(x = AgeCategory, y = BMI, fill = Diabetes_binary)) +
+ggplot(data, aes(x = Age, y = BMI, fill = Diabetes_012)) +
   geom_boxplot() +
   labs(title = "BMI by Age Category and Diabetes Status", x = "Age Category", y = "BMI") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -68,6 +72,45 @@ corrplot(cor_matrix, method = "color", type = "upper",
 
 ```{r}
 
+# Loading Libraries
+library(tidyverse)
+library(caret)
+library(rpart)
+library(e1071)
+library(class)
+
+# Splitting the data into 75% training and 25% testing sets
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Splitting data
+train_index <- createDataPartition(df$Outcome, p = 0.75, list = FALSE)
+
+# Create training and testing subsets
+train <- df[train_index, ]
+test <- df[-train_index, ]
+
+# Set up cross-validation with 5 folds and configure ROC-based evaluation
+ctrl <- trainControl(method = "cv", number = 5,
+                     classProbs = TRUE, summaryFunction = twoClassSummary)
+
+# Training Decision Tree Model
+model_tree <- train(Outcome ~ ., data = train,
+                    method = "rpart",
+                    trControl = ctrl,
+                    metric = "ROC")
+# Training SVM 
+model_svm <- train(Outcome ~ ., data = train,
+                   method = "svmRadial",
+                   trControl = ctrl,
+                   metric = "ROC")
+
+# Training KNN
+model_knn <- train(Outcome ~ ., data = train,
+                   method = "kknn",
+                   trControl = ctrl,
+                   metric = "ROC")
 ```
 
 # Cross-Validation Model Evaluation
