@@ -1,0 +1,171 @@
+---
+title: "INST452 Final Project"
+author: "Cesar Romero-Gonzalez, Micah Seghetti, Minsung Kim, Neha Mathur, Zulykath Lucero"
+date: "2025-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Preprocessing
+The dataset has no missing values. The dataset was preprocessed; *bucketing of age*.
+
+```{r}
+# Import Libraries
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(rpart)
+library(e1071)
+library(class)
+library(pROC)
+
+# Import Data
+df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
+
+# Remove prediabetic patients & Handle Missing Values
+df <- df %>%
+  filter(Diabetes_012 != 1) %>%  
+  mutate(Diabetes_012 = ifelse(Diabetes_012 == 2, 1, 0))
+
+df <- drop_na(df)
+df$Diabetes_012 <- factor(df$Diabetes_012, levels = c(0, 1), labels = c("NonDiabetic", "Diabetic"))
+
+# Examine the dataset
+names(df)
+summary(df)
+```
+
+# Data Visualization
+
+```{r}
+# 1. Histogram of BMI
+ggplot(df, aes(x = BMI)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of BMI", x = "BMI", y = "Count") +
+  theme_minimal()
+```
+
+```{r}
+# 2. Box Plot: Age Category by Diabetes Status
+ggplot(df, aes(x = Age, y = BMI, fill = Diabetes_012)) +
+  geom_boxplot() +
+  labs(title = "BMI by Age Category and Diabetes Status", 
+       x = "Age Category", y = "BMI") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
+```
+
+```{r}
+# 3. Correlation Heatmap
+# Select only numeric columns for correlation
+numeric_data <- df %>%
+  select_if(is.numeric)
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         tl.col = "black", tl.cex = 0.8, title = "Correlation Heatmap", mar = c(0,0,1,0))
+
+```
+
+# Model Building
+
+```{r}
+# Splitting the data into 75% training and 25% testing sets
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Splitting data
+train_index <- createDataPartition(df$Diabetes_012, p = 0.75, list = FALSE)
+
+# Create training and testing subsets
+train <- df[train_index, ]
+test <- df[-train_index, ]
+```
+
+```{r}
+# Set up cross-validation with 5 folds and configure ROC-based evaluation
+ctrl <- trainControl(method = "cv", number = 5,
+                     classProbs = TRUE, summaryFunction = twoClassSummary)
+```
+
+```{r}
+# Training Decision Tree Model
+model_tree <- train(Diabetes_012 ~ ., data = train,
+                    method = "rpart",
+                    trControl = ctrl,
+                    metric = "ROC")
+```
+
+```{r}
+# Training SVM 
+model_svm <- train(Diabetes_012 ~ ., data = train,
+                   method = "svmRadial",
+                   trControl = ctrl,
+                   metric = "ROC")
+```
+
+```{r}
+# Training KNN
+model_knn <- train(Diabetes_012 ~ ., data = train,
+                   method = "kknn",
+                   trControl = ctrl,
+                   metric = "ROC")
+```
+
+# Cross-Validation Model Evaluation
+
+```{r}
+# Define a function to compute evaluation metrics for a classification model
+eval_metrics <- function(model, test_data) {
+  
+  # Generate predicted probabilities for the positive class ("Diabetic")
+  probs <- predict(model, newdata = test_data, type = "prob")
+  
+  # Generate predicted class labels
+  preds <- predict(model, newdata = test_data)
+  
+  # Compute the AUC (Area Under the ROC Curve) for the positive class
+  auc_val <- as.numeric(roc(response = test_data$Diabetes_012, predictor = probs$Diabetic)$auc)
+  
+  # Generate a confusion matrix comparing predictions to actual outcomes
+  cm <- confusionMatrix(preds, test_data$Diabetes_012, positive = "Diabetic")
+  
+  # Return key evaluation metrics as a tidy tibble
+  tibble(
+    AUC = auc_val,                                  # Model's ability to rank positive cases higher
+    Accuracy = cm$overall["Accuracy"],              # Overall % of correct predictions
+    Sensitivity = cm$byClass["Sensitivity"],        # True Positive Rate (Recall)
+    Specificity = cm$byClass["Specificity"]         # True Negative Rate
+  )
+}
+
+# define model list
+models <- list(Tree = model_tree, SVM = model_svm, kNN = model_knn)
+
+# Collect evaluation results into a tidy data frame
+results_list <- lapply(models, eval_metrics, test_data = test)
+
+# Convert list to long-format data frame
+results_data <- bind_rows(results_list, .id = "Model") %>%
+  pivot_longer(cols = -Model, names_to = "Metric", values_to = "Value")
+
+head(results_data)
+```
+
+# Fairness and Bias Evaluation
+
+```{r}
+
+```
+
+# Test Set Model Evaluation
+
+```{r}
+
+```
