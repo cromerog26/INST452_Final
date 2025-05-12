@@ -194,6 +194,7 @@ eval_metrics <- function(model, test_data) {
   preds <- predict(model, newdata = test_data)
   auc_val <- as.numeric(roc(response = test_data$Diabetes_012, predictor = probs$Diabetic)$auc)
   cm <- confusionMatrix(preds, test_data$Diabetes_012, positive = "Diabetic")
+  head(predict(model_tree, newdata = test, type = "prob"))
   
   tibble(
     Accuracy = cm$overall["Accuracy"],
