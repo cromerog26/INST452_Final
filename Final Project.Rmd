@@ -24,7 +24,6 @@ library(e1071)
 library(pROC)
 ```
 
-
 ```{r}
 # Import Data
 df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
@@ -47,6 +46,8 @@ df <- df %>%
   sample_frac(size = total_sample_size / nrow(df)) %>%
   ungroup()
 
+# Dropping highly predictive features to avoid overfitting
+df <- df %>% select(-PhysHlth, -AnyHealthcare, -group_size)
 
 # Examine the dataset
 names(df)
@@ -104,8 +105,13 @@ test <- df[-train_index, ]
 
 ```{r}
 # Set up cross-validation with 5 folds and configure ROC-based evaluation
-ctrl <- trainControl(method = "cv", number = 5,
-                     classProbs = TRUE, summaryFunction = twoClassSummary)
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
 ```
 
 ```{r}
@@ -181,7 +187,6 @@ head(results_data)
 # Test Set Model Evaluation
 
 ```{r}
-
 
 # define
 eval_metrics <- function(model, test_data) {
