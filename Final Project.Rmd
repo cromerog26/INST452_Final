@@ -49,6 +49,9 @@ df <- df %>%
 # Dropping highly predictive features to avoid overfitting
 df <- df %>% select(-PhysHlth, -AnyHealthcare, -group_size)
 
+# Adding labels to the Sex variable for bias evaluation later on
+df$Sex <- factor(df$Sex, levels = c(0, 1), labels = c("Female", "Male"))
+
 # Examine the dataset
 names(df)
 summary(df)
@@ -104,12 +107,21 @@ test <- df[-train_index, ]
 ```
 
 ```{r}
+
+# Custom Summary Function
+custom_summary <- function(data, lev = NULL, model = NULL) {
+  require(pROC)
+  out <- twoClassSummary(data, lev, model)
+  acc <- postResample(pred = data$pred, obs = data$obs)[["Accuracy"]]
+  c(out, Accuracy = acc)
+}
+
 # Set up cross-validation with 5 folds and configure ROC-based evaluation
 ctrl <- trainControl(
   method = "cv",
   number = 5,
   classProbs = TRUE,
-  summaryFunction = twoClassSummary,
+  summaryFunction = custom_summary,
   savePredictions = "final"
 )
 ```
@@ -181,20 +193,65 @@ head(results_data)
 # Fairness and Bias Evaluation
 
 ```{r}
+ # Function to evaluate metrics by subgroup
+  eval_by_group <- function(model, test_data, group_var) {
+    group_levels <- unique(test_data[[group_var]])
+    
+    # For each level in the group (e.g., Male/Female), compute metrics
+    results <- lapply(group_levels, function(level) {
+      subset <- test_data[test_data[[group_var]] == level, ]
+      
+      # Predicted probabilities
+      probs <- predict(model, newdata = subset, type = "prob")
+      preds <- predict(model, newdata = subset)
+      
+      auc_val <- as.numeric(roc(response = subset$Diabetes_012, predictor = probs$Diabetic)$auc)
+      cm <- confusionMatrix(preds, subset$Diabetes_012, positive = "Diabetic")
+      
+      tibble(
+        Group = level,
+        AUC = auc_val,
+        Accuracy = cm$overall["Accuracy"],
+        Sensitivity = cm$byClass["Sensitivity"],
+        Specificity = cm$byClass["Specificity"]
+      )
+    })
+    
+    bind_rows(results)
+  }
 
+  # Apply the function to each model
+  bias_tree <- eval_by_group(model_tree, test, "Sex") %>% mutate(Model = "Decision Tree")
+  bias_svm  <- eval_by_group(model_svm, test, "Sex") %>% mutate(Model = "SVM")
+  bias_knn  <- eval_by_group(model_knn, test, "Sex") %>% mutate(Model = "kNN")
+
+  # Combine results
+  bias_results <- bind_rows(bias_tree, bias_svm, bias_knn)
+  
+  print(bias_results)
+  
+  # Create visulization
+  
+  bias_results_long <- bias_results %>%
+  pivot_longer(cols = c(AUC, Accuracy, Sensitivity, Specificity),
+               names_to = "Metric", values_to = "Value")
+
+ggplot(bias_results_long, aes(x = Group, y = Value, fill = Model)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~Metric, scales = "free_y") +
+  labs(title = "Model Performance by Sex Group", y = "Metric Value") +
+  theme_minimal()
 ```
 
 # Test Set Model Evaluation
 
 ```{r}
-
 # define
 eval_metrics <- function(model, test_data) {
   probs <- predict(model, newdata = test_data, type = "prob")
   preds <- predict(model, newdata = test_data)
   auc_val <- as.numeric(roc(response = test_data$Diabetes_012, predictor = probs$Diabetic)$auc)
   cm <- confusionMatrix(preds, test_data$Diabetes_012, positive = "Diabetic")
-  head(predict(model_tree, newdata = test, type = "prob"))
   
   tibble(
     Accuracy = cm$overall["Accuracy"],
@@ -220,7 +277,7 @@ test_results <- bind_rows(
 print(test_results)
 
 
-# Compare differences in performance between the cros-validation and test results.
+# Compare differences in performance between the cross-validation and test results.
 cv_results <- tibble(
   Model = c("Decision Tree", "SVM", "kNN"),
   CV_Accuracy = c(mean(model_tree$resample$Accuracy),
@@ -241,13 +298,11 @@ results_long <- test_results %>%
 ggplot(results_long, aes(x = Metric, y = Value, color = Model, group = Model)) +
   geom_line(linewidth = 1) +
   geom_point(size = 3) +
-  ylim(0.5, 1.0) +
   labs(
     title = "Test Set Model Performance Comparison",
     x = "Metric",
     y = "Score"
   ) +
   theme_minimal()
-
 
 ```
