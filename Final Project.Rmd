@@ -13,52 +13,70 @@ knitr::opts_chunk$set(echo = TRUE)
 The dataset has no missing values. The dataset was preprocessed; *bucketing of age*.
 
 ```{r}
+# Import Libraries
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(rpart)
+library(e1071)
+library(pROC)
+```
+
+
+```{r}
 # Import Data
 df <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
 
+# Remove prediabetic patients & Handle Missing Values
+df <- df %>%
+  filter(Diabetes_012 != 1) %>%  
+  mutate(Diabetes_012 = ifelse(Diabetes_012 == 2, 1, 0))
+
+df <- drop_na(df)
+df$Diabetes_012 <- factor(df$Diabetes_012, levels = c(0, 1), labels = c("NonDiabetic", "Diabetic"))
+
+total_sample_size <- 2000
+
+df <- df %>%
+  group_by(Diabetes_012) %>%
+  mutate(group_size = n()) %>%
+  ungroup() %>%
+  group_by(Diabetes_012) %>%
+  sample_frac(size = total_sample_size / nrow(df)) %>%
+  ungroup()
+
+
 # Examine the dataset
-summary(df)
-str(df)
-
-# Handle Missing Values
-df <- drop_na(df) # There are no missing values in the data
-
 names(df)
-
+summary(df)
 ```
 
 # Data Visualization
 
 ```{r}
-library(tidyverse)
-library(ggplot2)
-library(corrplot)
-library(caret)
-
-# (adjust your path as needed to your local path)
-data <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
-
-head(data)
-
-data$Diabetes_012 <- factor(data$Diabetes_012, levels = c(0,1), labels = c("No", "Yes"))
-
-
 # 1. Histogram of BMI
-ggplot(data, aes(x = BMI)) +
+ggplot(df, aes(x = BMI)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   labs(title = "Distribution of BMI", x = "BMI", y = "Count") +
   theme_minimal()
+```
 
+```{r}
 # 2. Box Plot: Age Category by Diabetes Status
-ggplot(data, aes(x = Age, y = BMI, fill = Diabetes_012)) +
+ggplot(df, aes(x = Age, y = BMI, fill = Diabetes_012)) +
   geom_boxplot() +
-  labs(title = "BMI by Age Category and Diabetes Status", x = "Age Category", y = "BMI") +
+  labs(title = "BMI by Age Category and Diabetes Status", 
+       x = "Age Category", y = "BMI") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   theme_minimal()
+```
 
+```{r}
 # 3. Correlation Heatmap
 # Select only numeric columns for correlation
-numeric_data <- data %>%
+numeric_data <- df %>%
   select_if(is.numeric)
 
 cor_matrix <- cor(numeric_data, use = "complete.obs")
@@ -71,43 +89,44 @@ corrplot(cor_matrix, method = "color", type = "upper",
 # Model Building
 
 ```{r}
-
-# Loading Libraries
-library(tidyverse)
-library(caret)
-library(rpart)
-library(e1071)
-library(class)
-
 # Splitting the data into 75% training and 25% testing sets
 
 # Set seed for reproducibility
 set.seed(123)
 
 # Splitting data
-train_index <- createDataPartition(df$Outcome, p = 0.75, list = FALSE)
+train_index <- createDataPartition(df$Diabetes_012, p = 0.75, list = FALSE)
 
 # Create training and testing subsets
 train <- df[train_index, ]
 test <- df[-train_index, ]
+```
 
+```{r}
 # Set up cross-validation with 5 folds and configure ROC-based evaluation
 ctrl <- trainControl(method = "cv", number = 5,
                      classProbs = TRUE, summaryFunction = twoClassSummary)
+```
 
+```{r}
 # Training Decision Tree Model
-model_tree <- train(Outcome ~ ., data = train,
+model_tree <- train(Diabetes_012 ~ ., data = train,
                     method = "rpart",
                     trControl = ctrl,
                     metric = "ROC")
+```
+
+```{r}
 # Training SVM 
-model_svm <- train(Outcome ~ ., data = train,
+model_svm <- train(Diabetes_012 ~ ., data = train,
                    method = "svmRadial",
                    trControl = ctrl,
                    metric = "ROC")
+```
 
+```{r}
 # Training KNN
-model_knn <- train(Outcome ~ ., data = train,
+model_knn <- train(Diabetes_012 ~ ., data = train,
                    method = "kknn",
                    trControl = ctrl,
                    metric = "ROC")
@@ -116,52 +135,46 @@ model_knn <- train(Outcome ~ ., data = train,
 # Cross-Validation Model Evaluation
 
 ```{r}
+# Define a function to compute evaluation metrics for a classification model
+eval_metrics <- function(model, test_data) {
+  
+  # Generate predicted probabilities for the positive class ("Diabetic")
+  probs <- predict(model, newdata = test_data, type = "prob")
+  
+  # Generate predicted class labels
+  preds <- predict(model, newdata = test_data)
+  
+  # Compute the AUC (Area Under the ROC Curve) for the positive class
+  auc_val <- as.numeric(roc(response = test_data$Diabetes_012, predictor = probs$Diabetic)$auc)
+  
+  # Generate a confusion matrix comparing predictions to actual outcomes
+  cm <- confusionMatrix(preds, test_data$Diabetes_012, positive = "Diabetic")
+  
+  # Return key evaluation metrics as a tidy tibble
+  tibble(
+    AUC = auc_val,                                  # Model's ability to rank positive cases higher
+    Accuracy = cm$overall["Accuracy"],              # Overall % of correct predictions
+    Sensitivity = cm$byClass["Sensitivity"],        # True Positive Rate (Recall)
+    Specificity = cm$byClass["Specificity"]         # True Negative Rate
+  )
+}
 
+# define model list
+models <- list(Tree = model_tree, SVM = model_svm, kNN = model_knn)
+
+# Collect evaluation results into a tidy data frame
+results_list <- lapply(models, eval_metrics, test_data = test)
+
+# Convert list to long-format data frame
+results_data <- bind_rows(results_list, .id = "Model") %>%
+  pivot_longer(cols = -Model, names_to = "Metric", values_to = "Value")
+
+head(results_data)
 ```
 
 # Fairness and Bias Evaluation
 
 ```{r}
- # Function to evaluate metrics by subgroup
-  eval_by_group <- function(model, test_data, group_var) {
-    group_levels <- unique(test_data[[group_var]])
-    
-    # For each level in the group (e.g., Male/Female), compute metrics
-    results <- lapply(group_levels, function(level) {
-      subset <- test_data[test_data[[group_var]] == level, ]
-      
-      # Predicted probabilities
-      probs <- predict(model, newdata = subset, type = "prob")
-      preds <- predict(model, newdata = subset)
-      
-      auc_val <- as.numeric(roc(response = subset$Diabetes_012, predictor = probs$Diabetic)$auc)
-      cm <- confusionMatrix(preds, subset$Diabetes_012, positive = "Diabetic")
-      
-      tibble(
-        Group = level,
-        AUC = auc_val,
-        Accuracy = cm$overall["Accuracy"],
-        Sensitivity = cm$byClass["Sensitivity"],
-        Specificity = cm$byClass["Specificity"]
-      )
-    })
-    
-    bind_rows(results)
-  }
-
-  # Apply the function to each model
-  bias_tree <- eval_by_group(model_tree, test, "Sex") %>% mutate(Model = "Decision Tree")
-  bias_svm  <- eval_by_group(model_svm, test, "Sex") %>% mutate(Model = "SVM")
-  bias_knn  <- eval_by_group(model_knn, test, "Sex") %>% mutate(Model = "kNN")
-
-  # Combine results
-  bias_results <- bind_rows(bias_tree, bias_svm, bias_knn)
-  
-  print(bias_results)
-  
-} else {
-  cat("Sex variable not found in the dataset.")
-}
 
 ```
 
