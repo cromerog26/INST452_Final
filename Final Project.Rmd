@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Data Preprocessing
-The dataset has no missing values. The dataset was preprocessed; *bucketing of age*.
+The dataset has no missing values. The dataset had to be changed. The test variable was said to be binary, but was in fact not; 0 = not diabetic, 1 = prediabetic, 2 = diabetic. The 1 values were ommited to solely focus on diabetic (=1) and not diabetic (=0).
 
 ```{r}
 # Import Libraries
