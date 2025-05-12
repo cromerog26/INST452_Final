@@ -37,7 +37,7 @@ df <- df %>%
 df <- drop_na(df)
 df$Diabetes_012 <- factor(df$Diabetes_012, levels = c(0, 1), labels = c("NonDiabetic", "Diabetic"))
 
-total_sample_size <- 2000
+total_sample_size <- 10000
 
 df <- df %>%
   group_by(Diabetes_012) %>%
@@ -181,5 +181,67 @@ head(results_data)
 # Test Set Model Evaluation
 
 ```{r}
+
+
+# define
+eval_metrics <- function(model, test_data) {
+  probs <- predict(model, newdata = test_data, type = "prob")
+  preds <- predict(model, newdata = test_data)
+  auc_val <- as.numeric(roc(response = test_data$Diabetes_012, predictor = probs$Diabetic)$auc)
+  cm <- confusionMatrix(preds, test_data$Diabetes_012, positive = "Diabetic")
+  
+  tibble(
+    Accuracy = cm$overall["Accuracy"],
+    Sensitivity = cm$byClass["Sensitivity"],
+    Specificity = cm$byClass["Specificity"],
+    AUC = auc_val
+  )
+}
+
+# Compare model performance
+results_tree <- eval_metrics(model_tree, test)
+results_svm <- eval_metrics(model_svm, test)
+results_knn <- eval_metrics(model_knn, test)
+
+test_results <- bind_rows(
+  results_tree,
+  results_svm,
+  results_knn,
+  .id = "Model"
+) %>%
+  mutate(Model = c("Decision Tree", "SVM", "kNN"))
+
+print(test_results)
+
+
+# Compare differences in performance between the cros-validation and test results.
+cv_results <- tibble(
+  Model = c("Decision Tree", "SVM", "kNN"),
+  CV_Accuracy = c(mean(model_tree$resample$Accuracy),
+                  mean(model_svm$resample$Accuracy),
+                  mean(model_knn$resample$Accuracy)),
+  CV_AUC = c(mean(model_tree$resample$ROC),
+             mean(model_svm$resample$ROC),
+             mean(model_knn$resample$ROC))
+)
+
+print(cv_results)
+
+
+results_long <- test_results %>%
+  pivot_longer(cols = -Model, names_to = "Metric", values_to = "Value")
+
+#  visualization comparing test set model
+ggplot(results_long, aes(x = Metric, y = Value, color = Model, group = Model)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  ylim(0.5, 1.0) +
+  labs(
+    title = "Test Set Model Performance Comparison",
+    x = "Metric",
+    y = "Score"
+  ) +
+  theme_minimal()
+
 
 ```
